@@ -1,0 +1,77 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Boston House Price Prediction</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Boston House Price Prediction</h1>
+        <form action="/predict" method="post">
+            <div class="form-group">
+                <div class="input-row">
+                    <label for="CRIM">Per Capita Crime Rate:</label>
+                    <input type="number" step="0.001" name="CRIM" required>
+                </div>
+                <div class="input-row">
+                    <label for="ZN">Residential Land Zone:</label>
+                    <input type="number" step="0.1" name="ZN" required>
+                </div>
+                <div class="input-row">
+                    <label for="INDUS">Non-Retail Business Acres:</label>
+                    <input type="number" step="0.01" name="INDUS" required>
+                </div>
+                <div class="input-row">
+                    <label for="CHAS">Charles River (0/1):</label>
+                    <input type="number" min="0" max="1" name="CHAS" required>
+                </div>
+                <div class="input-row">
+                    <label for="NOX">Nitric Oxide Concentration:</label>
+                    <input type="number" step="0.001" name="NOX" required>
+                </div>
+                <div class="input-row">
+                    <label for="RM">Average Rooms per Dwelling:</label>
+                    <input type="number" step="0.1" name="RM" required>
+                </div>
+                <div class="input-row">
+                    <label for="AGE">Owner-Occupied Units Built pre-1940:</label>
+                    <input type="number" step="0.1" name="AGE" required>
+                </div>
+                <div class="input-row">
+                    <label for="DIS">Distance to Employment Centers:</label>
+                    <input type="number" step="0.01" name="DIS" required>
+                </div>
+                <div class="input-row">
+                    <label for="RAD">Highway Accessibility Index:</label>
+                    <input type="number" min="1" max="24" name="RAD" required>
+                </div>
+                <div class="input-row">
+                    <label for="TAX">Property Tax Rate:</label>
+                    <input type="number" step="1" name="TAX" required>
+                </div>
+                <div class="input-row">
+                    <label for="PTRATIO">Pupil-Teacher Ratio:</label>
+                    <input type="number" step="0.1" name="PTRATIO" required>
+                </div>
+                <div class="input-row">
+                    <label for="B">Black Population Proportion:</label>
+                    <input type="number" step="0.001" name="B" required>
+                </div>
+                <div class="input-row">
+                    <label for="LSTAT">Lower Status Population (%):</label>
+                    <input type="number" step="0.01" name="LSTAT" required>
+                </div>
+            </div>
+            <input type="submit" value="Predict Price" class="btn">
+        </form>
+
+        {% if prediction %}
+        <div class="result">
+            <h2>Predicted House Price:</h2>
+            <p class="price">${{ "%.2f"|format(prediction * 1000) }}</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
