@@ -1,0 +1,85 @@
+pipeline {
+    agent any
+
+    environment {
+        PYTHON = "python3"
+        PIP = "pip3"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Setup Python Environment') {
+            steps {
+                sh '''
+                    $PIP install --upgrade pip
+                    $PIP install flask pandas numpy scikit-learn
+                '''
+            }
+        }
+
+        stage('Verify Files') {
+            steps {
+                sh '''
+                    echo "Checking required project files..."
+                    ls -l
+
+                    if [ ! -f "app.py" ]; then
+                        echo "ERROR: app.py not found"
+                        exit 1
+                    fi
+
+                    if [ ! -f "model.pkl" ]; then
+                        echo "ERROR: model.pkl not found"
+                        exit 1
+                    fi
+
+                    if [ ! -f "scaler.pkl" ]; then
+                        echo "ERROR: scaler.pkl not found"
+                        exit 1
+                    fi
+                '''
+            }
+        }
+
+        stage('Lint Flask App') {
+            steps {
+                sh '''
+                    echo "Running syntax check..."
+                    $PYTHON -m py_compile app.py
+                '''
+            }
+        }
+
+        // OPTIONAL: Uncomment if you want Jenkins to run the server
+        // stage('Run Flask App') {
+        //     steps {
+        //         sh '''
+        //             echo "Starting Flask server..."
+        //             nohup $PYTHON app.py &
+        //             sleep 5
+        //         '''
+        //     }
+        // }
+
+        stage('Archive Artifacts') {
+            steps {
+                archiveArtifacts artifacts: '*.pkl, *.txt, *.csv, *.html, *.css', fingerprint: true
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Build completed successfully!"
+        }
+        failure {
+            echo "Build failed. Check the logs."
+        }
+    }
+}
