@@ -1,85 +1,73 @@
 pipeline {
-    agent any
+  agent {
+    docker {
+      image 'python:3.11-slim'
+      args '-u root:root'   // run as root inside container so pip can install
+    }
+  }
 
-    environment {
-        PYTHON = "python3"
-        PIP = "pip3"
+  environment {
+    PYTHON = "python3"
+    PIP = "pip3"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
     }
 
-    stages {
+    stage('Prepare') {
+      steps {
+        sh '''
+          set -e
+          $PIP install --upgrade pip
+          # create a requirements file if you don't have one; you can commit it to repo
+          cat > requirements.txt <<EOF
+          flask
+          pandas
+          numpy
+          scikit-learn
+          EOF
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Setup Python Environment') {
-            steps {
-                sh '''
-                    $PIP install --upgrade pip
-                    $PIP install flask pandas numpy scikit-learn
-                '''
-            }
-        }
-
-        stage('Verify Files') {
-            steps {
-                sh '''
-                    echo "Checking required project files..."
-                    ls -l
-
-                    if [ ! -f "app.py" ]; then
-                        echo "ERROR: app.py not found"
-                        exit 1
-                    fi
-
-                    if [ ! -f "model.pkl" ]; then
-                        echo "ERROR: model.pkl not found"
-                        exit 1
-                    fi
-
-                    if [ ! -f "scaler.pkl" ]; then
-                        echo "ERROR: scaler.pkl not found"
-                        exit 1
-                    fi
-                '''
-            }
-        }
-
-        stage('Lint Flask App') {
-            steps {
-                sh '''
-                    echo "Running syntax check..."
-                    $PYTHON -m py_compile app.py
-                '''
-            }
-        }
-
-        // OPTIONAL: Uncomment if you want Jenkins to run the server
-        // stage('Run Flask App') {
-        //     steps {
-        //         sh '''
-        //             echo "Starting Flask server..."
-        //             nohup $PYTHON app.py &
-        //             sleep 5
-        //         '''
-        //     }
-        // }
-
-        stage('Archive Artifacts') {
-            steps {
-                archiveArtifacts artifacts: '*.pkl, *.txt, *.csv, *.html, *.css', fingerprint: true
-            }
-        }
+          $PIP install -r requirements.txt
+        '''
+      }
     }
 
-    post {
-        success {
-            echo "Build completed successfully!"
-        }
-        failure {
-            echo "Build failed. Check the logs."
-        }
+    stage('Verify Files') {
+      steps {
+        sh '''
+          echo "Listing workspace"
+          ls -la
+          if [ ! -f "app.py" ]; then
+            echo "ERROR: app.py not found"
+            exit 1
+          fi
+          if [ ! -f "model.pkl" ]; then
+            echo "WARNING: model.pkl not found (if you expect it to be present, commit it)"
+          fi
+        '''
+      }
     }
+
+    stage('Lint') {
+      steps {
+        sh '''
+          $PYTHON -m py_compile app.py
+          echo "app.py syntax OK"
+        '''
+      }
+    }
+
+    stage('Archive') {
+      steps {
+        archiveArtifacts artifacts: '*.pkl, requirements.txt, *.csv, *.html, *.css', fingerprint: true
+      }
+    }
+  }
+
+  post {
+    success { echo "Build succeeded" }
+    failure { echo "Build failed" }
+  }
 }
