@@ -1,35 +1,42 @@
 pipeline {
-  agent {
-    docker {
-      image 'python:3.11-slim'
-      args '-u root:root'   // run as root inside container so pip can install
-    }
-  }
+  agent any
 
   environment {
-    PYTHON = "python3"
-    PIP = "pip3"
+    VENV_DIR = "venv"
+    PYTHON = "${env.WORKSPACE}/venv/bin/python"
+    PIP = "${env.WORKSPACE}/venv/bin/pip"
   }
 
   stages {
+
     stage('Checkout') {
-      steps { checkout scm }
+      steps {
+        checkout scm
+      }
     }
 
-    stage('Prepare') {
+    stage('Create venv & Install') {
       steps {
         sh '''
           set -e
-          $PIP install --upgrade pip
-          # create a requirements file if you don't have one; you can commit it to repo
-          cat > requirements.txt <<EOF
-          flask
-          pandas
-          numpy
-          scikit-learn
-          EOF
+          echo "Python version:"
+          python3 --version || { echo "python3 not found"; exit 1; }
 
-          $PIP install -r requirements.txt
+          # create virtualenv (will fail if python3-venv missing)
+          python3 -m venv "${VENV_DIR}" || { echo "Failed to create venv. Install python3-venv on agent."; exit 2; }
+
+          . "${VENV_DIR}/bin/activate"
+
+          # pip upgrade and install requirements (use requirements.txt if present in repo)
+          ${PIP} install --upgrade pip
+
+          if [ -f requirements.txt ]; then
+            echo "Installing from requirements.txt"
+            ${PIP} install -r requirements.txt
+          else
+            echo "No requirements.txt found — installing minimal deps"
+            ${PIP} install flask pandas numpy scikit-learn
+          fi
         '''
       }
     }
@@ -37,29 +44,31 @@ pipeline {
     stage('Verify Files') {
       steps {
         sh '''
-          echo "Listing workspace"
+          echo "Workspace contents:"
           ls -la
+
           if [ ! -f "app.py" ]; then
-            echo "ERROR: app.py not found"
-            exit 1
+            echo "ERROR: app.py not found in workspace"
+            exit 3
           fi
-          if [ ! -f "model.pkl" ]; then
-            echo "WARNING: model.pkl not found (if you expect it to be present, commit it)"
-          fi
+
+          echo "model.pkl present? " && [ -f "model.pkl" ] && echo "yes" || echo "no"
+          echo "scaler.pkl present? " && [ -f "scaler.pkl" ] && echo "yes" || echo "no"
         '''
       }
     }
 
-    stage('Lint') {
+    stage('Lint / Syntax Check') {
       steps {
         sh '''
-          $PYTHON -m py_compile app.py
+          . "${VENV_DIR}/bin/activate"
+          ${PYTHON} -m py_compile app.py
           echo "app.py syntax OK"
         '''
       }
     }
 
-    stage('Archive') {
+    stage('Archive Artifacts') {
       steps {
         archiveArtifacts artifacts: '*.pkl, requirements.txt, *.csv, *.html, *.css', fingerprint: true
       }
@@ -67,7 +76,11 @@ pipeline {
   }
 
   post {
-    success { echo "Build succeeded" }
-    failure { echo "Build failed" }
+    success {
+      echo "Build completed successfully"
+    }
+    failure {
+      echo "Build failed — see logs above"
+    }
   }
 }
