@@ -2,85 +2,98 @@ pipeline {
   agent any
 
   environment {
-    VENV_DIR = "venv"
-    PYTHON = "${env.WORKSPACE}/venv/bin/python"
-    PIP = "${env.WORKSPACE}/venv/bin/pip"
+    SUBDIR = "boston_house_price_prediction"
+    VENV_DIR = "${env.SUBDIR}/venv"
+    PYTHON = "${env.WORKSPACE}/${env.VENV_DIR}/bin/python"
+    PIP = "${env.WORKSPACE}/${env.VENV_DIR}/bin/pip"
   }
 
   stages {
-
     stage('Checkout') {
       steps {
         checkout scm
       }
     }
 
-    stage('Create venv & Install') {
+    stage('Show workspace') {
       steps {
-        sh '''
-          set -e
-          echo "Python version:"
-          python3 --version || { echo "python3 not found"; exit 1; }
-
-          # create virtualenv (will fail if python3-venv missing)
-          python3 -m venv "${VENV_DIR}" || { echo "Failed to create venv. Install python3-venv on agent."; exit 2; }
-
-          . "${VENV_DIR}/bin/activate"
-
-          # pip upgrade and install requirements (use requirements.txt if present in repo)
-          ${PIP} install --upgrade pip
-
-          if [ -f requirements.txt ]; then
-            echo "Installing from requirements.txt"
-            ${PIP} install -r requirements.txt
-          else
-            echo "No requirements.txt found — installing minimal deps"
-            ${PIP} install flask pandas numpy scikit-learn
-          fi
-        '''
+        sh 'echo "Workspace root: $WORKSPACE"; ls -la || true'
       }
     }
 
-    stage('Verify Files') {
+    stage('Create venv & Install (in subfolder)') {
       steps {
-        sh '''
-          echo "Workspace contents:"
-          ls -la
+        dir(env.SUBDIR) {
+          sh '''
+            set -e
+            echo "Inside subfolder: $(pwd)"
+            echo "Python version:"
+            python3 --version || { echo "python3 not found on agent"; exit 1; }
 
-          if [ ! -f "app.py" ]; then
-            echo "ERROR: app.py not found in workspace"
-            exit 3
-          fi
+            # create virtualenv in subfolder
+            python3 -m venv venv || { echo "Failed to create venv. Install python3-venv on agent."; exit 2; }
 
-          echo "model.pkl present? " && [ -f "model.pkl" ] && echo "yes" || echo "no"
-          echo "scaler.pkl present? " && [ -f "scaler.pkl" ] && echo "yes" || echo "no"
-        '''
+            . venv/bin/activate
+            ./venv/bin/pip install --upgrade pip
+
+            if [ -f requirements.txt ]; then
+              echo "Installing from requirements.txt"
+              ./venv/bin/pip install -r requirements.txt
+            else
+              echo "No requirements.txt found — installing minimal deps"
+              ./venv/bin/pip install flask pandas numpy scikit-learn
+            fi
+          '''
+        }
       }
     }
 
-    stage('Lint / Syntax Check') {
+    stage('Verify Files (subfolder)') {
       steps {
-        sh '''
-          . "${VENV_DIR}/bin/activate"
-          ${PYTHON} -m py_compile app.py
-          echo "app.py syntax OK"
-        '''
+        dir(env.SUBDIR) {
+          sh '''
+            echo "Listing contents of subfolder:"
+            ls -la
+
+            if [ ! -f "app.py" ]; then
+              echo "ERROR: app.py not found in ${SUBDIR}"
+              exit 3
+            fi
+
+            if [ ! -f "model.pkl" ]; then
+              echo "WARNING: model.pkl not found in ${SUBDIR}"
+            fi
+
+            if [ ! -f "scaler.pkl" ]; then
+              echo "WARNING: scaler.pkl not found in ${SUBDIR}"
+            fi
+          '''
+        }
+      }
+    }
+
+    stage('Lint / Syntax Check (subfolder)') {
+      steps {
+        dir(env.SUBDIR) {
+          sh '''
+            . venv/bin/activate
+            ./venv/bin/python -m py_compile app.py
+            echo "app.py syntax OK"
+          '''
+        }
       }
     }
 
     stage('Archive Artifacts') {
       steps {
-        archiveArtifacts artifacts: '*.pkl, requirements.txt, *.csv, *.html, *.css', fingerprint: true
+        // archive files from subfolder
+        archiveArtifacts artifacts: 'boston_house_price_prediction/*.pkl, boston_house_price_prediction/requirements.txt, boston_house_price_prediction/*.csv, boston_house_price_prediction/*.html, boston_house_price_prediction/*.css', fingerprint: true
       }
     }
   }
 
   post {
-    success {
-      echo "Build completed successfully"
-    }
-    failure {
-      echo "Build failed — see logs above"
-    }
+    success { echo "Build completed successfully" }
+    failure { echo "Build failed — check logs above" }
   }
 }
